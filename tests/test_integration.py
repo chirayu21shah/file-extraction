@@ -1,15 +1,3 @@
-"""
-Integration test: exercises the full POST → poll → GET results flow
-against a running service (docker-compose up).
-
-Requires:
-  - The stack to be running:  docker-compose up --build -d
-  - The sample archive to exist:  sample_nested.zip  (run create_sample_archive.py first)
-
-Run with:
-  pytest tests/test_integration.py -v
-"""
-
 import os
 import time
 
@@ -20,10 +8,7 @@ BASE_URL = os.getenv("SERVICE_URL", "http://localhost:8080")
 SAMPLE_ARCHIVE = os.path.join(os.path.dirname(__file__), "..", "sample_nested.zip")
 TIMEOUT = 30  # seconds to wait for a job to complete
 
-
-# ---------------------------------------------------------------------------
 # Helpers
-# ---------------------------------------------------------------------------
 
 def wait_for_completion(job_id: str, timeout: int = TIMEOUT) -> dict:
     """Poll GET /extractions/{job_id} until status is completed or failed."""
@@ -38,10 +23,7 @@ def wait_for_completion(job_id: str, timeout: int = TIMEOUT) -> dict:
     raise TimeoutError(f"Job {job_id} did not finish within {timeout}s")
 
 
-# ---------------------------------------------------------------------------
 # Tests
-# ---------------------------------------------------------------------------
-
 class TestHealthEndpoint:
     def test_health_returns_200(self):
         resp = requests.get(f"{BASE_URL}/health", timeout=5)

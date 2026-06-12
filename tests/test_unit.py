@@ -1,8 +1,3 @@
-"""
-Unit tests for archive utility functions.
-These tests do NOT require a running database or Flask server.
-"""
-
 import io
 import os
 import sys
@@ -12,17 +7,9 @@ import zipfile
 
 import pytest
 
-# ---------------------------------------------------------------------------
-# Make the project root importable without installing the package
-# ---------------------------------------------------------------------------
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from utils import extract_archive, is_archive
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 def make_zip(files: dict) -> str:
     """Write a zip containing {filename: content} to a temp file and return its path."""
@@ -44,11 +31,7 @@ def make_tar_gz(files: dict) -> str:
             tf.addfile(info, io.BytesIO(data))
     return tmp.name
 
-
-# ---------------------------------------------------------------------------
 # is_archive
-# ---------------------------------------------------------------------------
-
 class TestIsArchive:
     def test_zip(self):
         assert is_archive("file.zip") is True
@@ -76,9 +59,7 @@ class TestIsArchive:
         assert is_archive("data.json") is False
 
 
-# ---------------------------------------------------------------------------
 # extract_archive
-# ---------------------------------------------------------------------------
 
 class TestExtractArchive:
     def test_extract_zip(self):

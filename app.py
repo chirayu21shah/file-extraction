@@ -1,14 +1,13 @@
 from queue import Queue
 from concurrent.futures import ThreadPoolExecutor
 import datetime
-from fnmatch import fnmatch
 import time
 import tempfile
 import threading
 import uuid
 import os
 
-from utils import extract_archive, is_archive
+from utils import extract_archive, is_archive, match_pattern, normalise_path
 
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
@@ -89,10 +88,24 @@ def save_result(job_id, matched_path, archive_path, size):
     db.session.add(result)
     db.session.commit()
 
+def nested_scan_archive(job_id, archive_path, pattern, depth, archive_chain):
+    with app.app_context():
+        scan_archive(
+            job_id=job_id,
+            archive_path=archive_path,
+            pattern=pattern,
+            depth=depth,
+            archive_chain=archive_chain
+        )
+
 # SCAN ARCHIVE
-def scan_archive(job_id, archive_path, pattern, depth=0):
+def scan_archive(job_id, archive_path, pattern, depth=0, archive_chain=None):
     if depth > MAX_DEPTH:
         return
+
+    archive_name = normalise_path(os.path.basename(archive_path))
+    if archive_chain is None:
+        archive_chain = archive_name
     
     with tempfile.TemporaryDirectory() as temp_dir:
             extract_archive(archive_path, temp_dir)
@@ -100,25 +113,27 @@ def scan_archive(job_id, archive_path, pattern, depth=0):
             for root, dirs, files in os.walk(temp_dir):
                 for file in files:
                     full_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(full_path, temp_dir)
+                    rel_path = normalise_path(os.path.relpath(full_path, temp_dir))
+                    full_matched_path = f"{archive_chain}/{rel_path}"
 
-                    if fnmatch(rel_path, pattern):
+                    if match_pattern(rel_path, pattern) or match_pattern(full_matched_path, pattern):
                         size = os.path.getsize(full_path)
 
                         save_result(
                             job_id=job_id,
-                            matched_path=rel_path,
-                            archive_path=archive_path,
-                            size = size
+                            matched_path=full_matched_path,
+                            archive_path=archive_chain,
+                            size=size
                         )
                     
                     if is_archive(full_path):
                         future = executor.submit(
-                            scan_archive,
+                            nested_scan_archive,
                             job_id,
                             full_path,
                             pattern,
                             depth + 1
+                            ,full_matched_path
                         )
                         futures.append(future)
             for future in futures:
@@ -185,7 +200,7 @@ def create_extraction():
     file = request.files["file"]
 
     job_id = str(uuid.uuid4())
-    filename = f"{job_id}_{file.filename}"
+    filename = f"{file.filename}"
     
     archive_path = os.path.join(UPLOAD_DIR, filename)
     file.save(archive_path)

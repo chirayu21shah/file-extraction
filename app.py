@@ -28,12 +28,20 @@ CONCURRENCY = int(os.getenv('CONCURRENCY', 4))
 
 MAX_DEPTH = 5
 
-app = Flask(__name__)
+def create_app(testing=False):
+    app = Flask(__name__)
+    if testing:
+        app.config['TESTING'] = True
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    else:
+        app.config[
+            "SQLALCHEMY_DATABASE_URI"
+        ] = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-app.config[
-    "SQLALCHEMY_DATABASE_URI"
-] = f"postgresql://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    return app
 
+app = create_app()
 db = SQLAlchemy(app)
 
 
@@ -64,16 +72,22 @@ job_queue = Queue()
 
 executor = ThreadPoolExecutor(max_workers=CONCURRENCY)
 
-# Initialize database tables (retry until DB is ready)
-with app.app_context():
-    for attempt in range(10):
-        try:
-            db.create_all()
-            break
-        except Exception:
-            if attempt == 9:
-                raise
-            time.sleep(2)
+def initialize_database():
+    with app.app_context():
+        for attempt in range(10):
+            try:
+                db.create_all()
+                break
+            except Exception:
+                if attempt == 9:
+                    raise
+                time.sleep(2)
+
+
+def start_workers():
+    for _ in range(CONCURRENCY):
+        t = threading.Thread(target=worker, daemon=True)
+        t.start()
 
 # SAVE RESULT
 def save_result(job_id, matched_path, archive_path, size):
@@ -177,11 +191,6 @@ def worker():
                     os.remove(archive_path)
                 job_queue.task_done()
 
-for _ in range(CONCURRENCY):
-    t = threading.Thread(target=worker, daemon=True)
-    t.start()
-
-
 @app.route('/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy"}), 200
@@ -270,4 +279,6 @@ def get_results(job_id):
     }), 200
 
 if __name__ == '__main__':
+    initialize_database()
+    start_workers()
     app.run(host='0.0.0.0', port=PORT)
